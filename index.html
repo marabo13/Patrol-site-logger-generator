@@ -123,8 +123,6 @@ button:disabled{opacity:.55}
 </div>
 
 <script>
-const CLIENT_KEY = "DCOJ-DISCORD-PATROL-KEY-2026"; // MUST match Vercel env var
-
 const S={start:"pStart",user:"pUser",rank:"pRank",mentor:"pMentor"};
 const $=id=>document.getElementById(id);
 
@@ -139,20 +137,19 @@ function fmt(ms){
 }
 
 function refresh(){
-  $("mentorBlock").classList.toggle("hidden",$("rank").value!=="Arbiter");
+  $("mentorBlock").classList.toggle("hidden",$("rank").value==="Arbiter"?false:true);
   const on=!!load(S.start);
   $("startBtn").disabled=on;
   $("endBtn").disabled=!on;
-  $("live").textContent=on?`On patrol • ${fmt(Date.now()-new Date(load(S.start)))}`:"Not on patrol.";
+  $("live").textContent=on
+    ?`On patrol • ${fmt(Date.now()-new Date(load(S.start)))}`
+    :"Not on patrol.";
 }
 
 async function send(data){
   const r=await fetch("/api/patrol",{
     method:"POST",
-    headers:{
-      "Content-Type":"application/json",
-      "x-client-key": CLIENT_KEY
-    },
+    headers:{ "Content-Type":"application/json" },
     body:JSON.stringify(data)
   });
   if(!r.ok) throw new Error(await r.text());
@@ -162,6 +159,7 @@ $("startBtn").onclick=async()=>{
   const u=$("username").value.trim();
   const r=$("rank").value;
   const m=$("mentor").value.trim();
+
   if(!u||!r) return $("status").textContent="❌ Username and rank required.";
   if(r==="Arbiter"&&!m) return $("status").textContent="❌ Arbiter requires Quaestor mentor.";
 
@@ -173,7 +171,7 @@ $("startBtn").onclick=async()=>{
     $("status").textContent="✅ Patrol started.";
   }catch(e){
     del(S.start);
-    $("status").textContent="❌ "+e.message;
+    $("status").textContent="❌ Failed to log.";
   }
   refresh();
 };
@@ -202,7 +200,7 @@ $("submitEnd").onclick=async()=>{
     $("status").textContent="✅ Patrol ended.";
     $("endModal").style.display="none";
   }catch(e){
-    $("status").textContent="❌ "+e.message;
+    $("status").textContent="❌ Failed to log.";
   }
   refresh();
 };
