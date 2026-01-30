@@ -1,0 +1,215 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DCoJ Patrol Logger</title>
+
+<style>
+body{
+  margin:0;
+  font-family:system-ui;
+  background:#0b0214;
+  color:#f7f2ff;
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:24px;
+}
+.panel{
+  width:100%;
+  max-width:560px;
+  padding:20px;
+  border-radius:18px;
+  border:1px solid rgba(255,255,255,.15);
+  background:rgba(255,255,255,.06);
+}
+h1{margin:0 0 6px;font-size:22px}
+p{margin:0 0 14px;color:#cdb7ff;font-size:13px}
+
+label{display:block;margin:10px 0 6px;color:#cdb7ff;font-size:13px}
+input,select,textarea{
+  width:100%;
+  padding:10px;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,.15);
+  background:#0b0114;
+  color:#fff;
+}
+textarea{min-height:80px}
+
+button{
+  width:100%;
+  padding:16px;
+  margin-top:12px;
+  border-radius:14px;
+  border:none;
+  cursor:pointer;
+  font-weight:900;
+  font-size:15px;
+}
+.start{background:#2ecc71;color:#081b10}
+.end{background:#e74c3c;color:#1a0000}
+.reset{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.15)}
+button:disabled{opacity:.55}
+
+#status,#live{margin-top:10px;color:#cdb7ff;font-size:13px}
+.hidden{display:none}
+
+/* modal */
+.modalBack{
+  position:fixed; inset:0;
+  background:rgba(0,0,0,.65);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  padding:16px;
+}
+.modal{
+  background:#11031f;
+  width:100%;
+  max-width:520px;
+  border-radius:16px;
+  padding:16px;
+  border:1px solid rgba(255,255,255,.15);
+}
+</style>
+</head>
+
+<body>
+<div class="panel">
+  <h1>DCoJ Patrol Logger</h1>
+  <p>Official patrol logging system</p>
+
+  <label>Username</label>
+  <input id="username">
+
+  <label>DCoJ Enforcement Rank</label>
+  <select id="rank">
+    <option value="">-- Select rank --</option>
+    <option>Arbiter</option>
+    <option>Quaestor</option>
+    <option>Praetor</option>
+    <option>Sanctor</option>
+    <option>Ast. Chief Arbiter</option>
+    <option>Chief Arbiter</option>
+  </select>
+
+  <div id="mentorBlock" class="hidden">
+    <label>Supervised by (Quaestor Mentor)</label>
+    <input id="mentor">
+  </div>
+
+  <button class="start" id="startBtn">🟢 START PATROL</button>
+  <button class="end" id="endBtn" disabled>🔴 END PATROL</button>
+  <button class="reset" id="resetBtn">Reset</button>
+
+  <div id="status"></div>
+  <div id="live"></div>
+</div>
+
+<!-- END MODAL -->
+<div class="modalBack" id="endModal">
+  <div class="modal">
+    <label>Number of arrests</label>
+    <input id="arrests" type="number" min="0" value="0">
+
+    <label>Attendees (comma or new line)</label>
+    <textarea id="attendees"></textarea>
+
+    <button class="end" id="submitEnd">Submit End Patrol</button>
+  </div>
+</div>
+
+<script>
+const CLIENT_KEY = "DCOJ-DISCORD-PATROL-KEY-2026"; // MUST match Vercel env var
+
+const S={start:"pStart",user:"pUser",rank:"pRank",mentor:"pMentor"};
+const $=id=>document.getElementById(id);
+
+function save(k,v){localStorage.setItem(k,v)}
+function load(k){return localStorage.getItem(k)}
+function del(k){localStorage.removeItem(k)}
+
+function fmt(ms){
+  const s=Math.floor(ms/1000),h=Math.floor(s/3600),
+        m=Math.floor((s%3600)/60),r=s%60;
+  return h?`${h}h ${m}m ${r}s`:m?`${m}m ${r}s`:`${r}s`;
+}
+
+function refresh(){
+  $("mentorBlock").classList.toggle("hidden",$("rank").value!=="Arbiter");
+  const on=!!load(S.start);
+  $("startBtn").disabled=on;
+  $("endBtn").disabled=!on;
+  $("live").textContent=on?`On patrol • ${fmt(Date.now()-new Date(load(S.start)))}`:"Not on patrol.";
+}
+
+async function send(data){
+  const r=await fetch("/api/patrol",{
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json",
+      "x-client-key": CLIENT_KEY
+    },
+    body:JSON.stringify(data)
+  });
+  if(!r.ok) throw new Error(await r.text());
+}
+
+$("startBtn").onclick=async()=>{
+  const u=$("username").value.trim();
+  const r=$("rank").value;
+  const m=$("mentor").value.trim();
+  if(!u||!r) return $("status").textContent="❌ Username and rank required.";
+  if(r==="Arbiter"&&!m) return $("status").textContent="❌ Arbiter requires Quaestor mentor.";
+
+  const t=new Date().toISOString();
+  save(S.start,t); save(S.user,u); save(S.rank,r); if(m) save(S.mentor,m);
+
+  try{
+    await send({action:"Start Patrol",username:u,rank:r,mentor:m,startISO:t,time:t});
+    $("status").textContent="✅ Patrol started.";
+  }catch(e){
+    del(S.start);
+    $("status").textContent="❌ "+e.message;
+  }
+  refresh();
+};
+
+$("endBtn").onclick=()=>{$("endModal").style.display="flex"};
+
+$("submitEnd").onclick=async()=>{
+  const end=new Date().toISOString();
+  const start=load(S.start);
+  const attendees=[...new Set($("attendees").value.split(/[\n,]+/).map(x=>x.trim()).filter(Boolean))];
+
+  try{
+    await send({
+      action:"End Patrol",
+      username:load(S.user),
+      rank:load(S.rank),
+      mentor:load(S.mentor)||"",
+      startISO:start,
+      endISO:end,
+      durationText:fmt(new Date(end)-new Date(start)),
+      arrests:$("arrests").value,
+      attendees,
+      time:end
+    });
+    del(S.start);
+    $("status").textContent="✅ Patrol ended.";
+    $("endModal").style.display="none";
+  }catch(e){
+    $("status").textContent="❌ "+e.message;
+  }
+  refresh();
+};
+
+$("resetBtn").onclick=()=>{Object.values(S).forEach(del);refresh()};
+$("rank").onchange=refresh;
+refresh(); setInterval(refresh,1000);
+</script>
+</body>
+</html>
