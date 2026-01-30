@@ -3,14 +3,9 @@ export default async function handler(req, res) {
     return res.status(405).send("Method not allowed");
   }
 
-  // 🔐 Client key protection
-  if (req.headers["x-client-key"] !== process.env.CLIENT_KEY) {
-    return res.status(401).send("Unauthorized");
-  }
-
   const WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
   if (!WEBHOOK_URL) {
-    return res.status(500).send("Missing webhook");
+    return res.status(500).send("Missing DISCORD_WEBHOOK_URL");
   }
 
   const b = req.body || {};
@@ -32,11 +27,11 @@ export default async function handler(req, res) {
   if (b.durationText) fields.push({ name:"Duration", value:`**${b.durationText}**`, inline:true });
   if (b.arrests!==undefined) fields.push({ name:"Arrests", value:`**${b.arrests}**`, inline:true });
 
-  const att = Array.isArray(b.attendees)&&b.attendees.length
+  const attendees = Array.isArray(b.attendees) && b.attendees.length
     ? b.attendees.map(x=>`• ${x}`).join("\n").slice(0,1000)
     : "None";
 
-  fields.push({ name:"Attendees", value:att, inline:false });
+  fields.push({ name:"Attendees", value:attendees, inline:false });
 
   const embed = {
     title:b.action==="Start Patrol"?"🟢 Patrol Started":"🔴 Patrol Ended",
